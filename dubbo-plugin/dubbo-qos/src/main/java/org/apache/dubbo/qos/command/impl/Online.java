@@ -16,21 +16,29 @@
  */
 package org.apache.dubbo.qos.command.impl;
 
+import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.URLBuilder;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.config.model.ApplicationModel;
-import org.apache.dubbo.config.model.ProviderModel;
+import org.apache.dubbo.common.utils.ArrayUtils;
 import org.apache.dubbo.qos.command.BaseCommand;
 import org.apache.dubbo.qos.command.CommandContext;
 import org.apache.dubbo.qos.command.annotation.Cmd;
 import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.RegistryFactory;
-import org.apache.dubbo.registry.support.ProviderConsumerRegTable;
-import org.apache.dubbo.registry.support.ProviderInvokerWrapper;
+import org.apache.dubbo.registry.RegistryService;
+import org.apache.dubbo.registry.support.AbstractRegistryFactory;
+import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.rpc.model.ProviderModel;
+import org.apache.dubbo.rpc.model.ServiceRepository;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+
+import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
+import static org.apache.dubbo.rpc.cluster.Constants.EXPORT_KEY;
+import static org.apache.dubbo.rpc.cluster.Constants.REFER_KEY;
 
 @Cmd(name = "online", summary = "online dubbo", example = {
         "online dubbo",
@@ -39,29 +47,35 @@ import java.util.Set;
 public class Online implements BaseCommand {
     private Logger logger = LoggerFactory.getLogger(Online.class);
     private RegistryFactory registryFactory = ExtensionLoader.getExtensionLoader(RegistryFactory.class).getAdaptiveExtension();
+    private ServiceRepository serviceRepository = ApplicationModel.getServiceRepository();
 
     @Override
     public String execute(CommandContext commandContext, String[] args) {
         logger.info("receive online command");
         String servicePattern = ".*";
-        if (args != null && args.length > 0) {
+        if (ArrayUtils.isNotEmpty(args)) {
             servicePattern = args[0];
         }
 
         boolean hasService = false;
 
-        List<ProviderModel> providerModelList = ApplicationModel.allProviderModels();
+        Collection<ProviderModel> providerModelList = serviceRepository.getExportedServices();
         for (ProviderModel providerModel : providerModelList) {
             if (providerModel.getServiceName().matches(servicePattern)) {
                 hasService = true;
-                Set<ProviderInvokerWrapper> providerInvokerWrapperSet = ProviderConsumerRegTable.getProviderInvoker(providerModel.getServiceName());
-                for (ProviderInvokerWrapper providerInvokerWrapper : providerInvokerWrapperSet) {
-                    if (providerInvokerWrapper.isReg()) {
-                        continue;
+                List<ProviderModel.RegisterStatedURL> statedUrls = providerModel.getStatedUrl();
+                for (ProviderModel.RegisterStatedURL statedURL : statedUrls) {
+                    if (statedURL.isRegistered()) {
+                        URL url = URLBuilder.from(statedURL.getRegistryUrl())
+                                .setPath(RegistryService.class.getName())
+                                .addParameter(INTERFACE_KEY, RegistryService.class.getName())
+                                .removeParameters(EXPORT_KEY, REFER_KEY)
+                                .build();
+                        String key = url.toServiceStringWithoutResolving();
+                        Registry registry = AbstractRegistryFactory.getRegistry(key);
+                        registry.register(statedURL.getProviderUrl());
+                        statedURL.setRegistered(true);
                     }
-                    Registry registry = registryFactory.getRegistry(providerInvokerWrapper.getRegistryUrl());
-                    registry.register(providerInvokerWrapper.getProviderUrl());
-                    providerInvokerWrapper.setReg(true);
                 }
             }
         }
@@ -71,6 +85,5 @@ public class Online implements BaseCommand {
         } else {
             return "service not found";
         }
-
     }
 }
