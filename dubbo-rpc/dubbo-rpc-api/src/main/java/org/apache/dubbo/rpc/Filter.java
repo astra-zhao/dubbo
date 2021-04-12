@@ -49,19 +49,7 @@ public interface Filter {
 
     interface Listener {
 
-        /**
-         * Please use {@link #onMessage(Result, Invoker, Invocation)} instead.
-         * This method is kept only compatibility and may get removed at any version in the future.
-         *
-         * @param appResponse
-         * @param invoker
-         * @param invocation
-         */
-        @Deprecated
-        default void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
-        }
-
-        void onMessage(Result appResponse, Invoker<?> invoker, Invocation invocation);
+        void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation);
 
         void onError(Throwable t, Invoker<?> invoker, Invocation invocation);
     }

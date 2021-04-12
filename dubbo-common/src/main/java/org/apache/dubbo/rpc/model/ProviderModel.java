@@ -16,8 +16,10 @@
  */
 package org.apache.dubbo.rpc.model;
 
+import org.apache.dubbo.common.BaseServiceMetadata;
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.config.service.ServiceConfig;
+import org.apache.dubbo.common.utils.ReflectUtils;
+import org.apache.dubbo.config.ServiceConfigBase;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -32,16 +34,16 @@ import java.util.Set;
  * ProviderModel is about published services
  */
 public class ProviderModel {
-    private final String serviceKey;
+    private String serviceKey;
     private final Object serviceInstance;
     private final ServiceDescriptor serviceModel;
-    private final ServiceConfig<?> serviceConfig;
+    private final ServiceConfigBase<?> serviceConfig;
     private final List<RegisterStatedURL> urls;
 
     public ProviderModel(String serviceKey,
                          Object serviceInstance,
                          ServiceDescriptor serviceModel,
-                         ServiceConfig<?> serviceConfig) {
+                         ServiceConfigBase<?> serviceConfig) {
         if (null == serviceInstance) {
             throw new IllegalArgumentException("Service[" + serviceKey + "]Target is NULL.");
         }
@@ -56,6 +58,7 @@ public class ProviderModel {
     public String getServiceKey() {
         return serviceKey;
     }
+
 
     public Class<?> getServiceInterfaceClass() {
         return serviceModel.getServiceInterfaceClass();
@@ -73,7 +76,7 @@ public class ProviderModel {
         return serviceModel;
     }
 
-    public ServiceConfig getServiceConfig() {
+    public ServiceConfigBase getServiceConfig() {
         return serviceConfig;
     }
 
@@ -131,12 +134,21 @@ public class ProviderModel {
     public ProviderModel(String serviceKey,
                          Object serviceInstance,
                          ServiceDescriptor serviceModel,
-                         ServiceConfig<?> serviceConfig,
+                         ServiceConfigBase<?> serviceConfig,
                          ServiceMetadata serviceMetadata) {
         this(serviceKey, serviceInstance, serviceModel, serviceConfig);
 
         this.serviceMetadata = serviceMetadata;
         initMethod(serviceModel.getServiceInterfaceClass());
+    }
+
+
+    public void setServiceKey(String serviceKey) {
+        this.serviceKey = serviceKey;
+        if (serviceMetadata != null) {
+            serviceMetadata.setServiceKey(serviceKey);
+            serviceMetadata.setGroup(BaseServiceMetadata.groupFromServiceKey(serviceKey));
+        }
     }
 
     public String getServiceName() {
@@ -173,7 +185,7 @@ public class ProviderModel {
         methodsToExport = serviceInterfaceClass.getMethods();
 
         for (Method method : methodsToExport) {
-            method.setAccessible(true);
+            ReflectUtils.makeAccessible(method);
 
             List<ProviderMethodModel> methodModels = methods.get(method.getName());
             if (methodModels == null) {
